@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F5E9"/>
+      <stop offset="100%" style="stop-color:#F3E5F5"/>
+    </linearGradient>
+    <linearGradient id="heartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7C9A92"/>
+      <stop offset="100%" style="stop-color:#B8A9C9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
+
+  <!-- Heart shape -->
+  <path d="M256 420c-8.5 0-16.5-3.3-22.5-9.3l-140-140c-37-37-37-97 0-134 18-18 42-27 67-27s49 9 67 27l28.5 28.5 28.5-28.5c18-18 42-27 67-27s49 9 67 27c37 37 37 97 0 134l-140 140c-6 6-14 9.3-22.5 9.3z"
+        fill="url(#heartGrad)"
+        transform="translate(0, -20)"/>
+
+  <!-- Sparkle/star accents -->
+  <g fill="#FFFFFF" opacity="0.8">
+    <circle cx="140" cy="160" r="12"/>
+    <circle cx="372" cy="160" r="12"/>
+    <circle cx="256" cy="100" r="8"/>
+  </g>
+</svg>

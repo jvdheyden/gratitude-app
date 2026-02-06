@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#7BA387">
+  <meta name="description" content="A mindful gratitude journaling app with gentle reminders">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Gratitude">
+
+  <title>Gratitude - Daily Reflections</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="header-logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.82-.13 2.68-.37M12 2c3.5 0 6.5 2.5 7.5 6M12 2v10l6.5 3.5"/>
+            <path d="M17 8l2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="header-text">
+          <h1>Gratitude</h1>
+          <p>Daily reflections</p>
+        </div>
+      </div>
+      <nav class="header-nav">
+        <button class="nav-btn active" data-view="home" aria-label="Home">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+          </svg>
+        </button>
+        <button class="nav-btn" data-view="history" aria-label="Calendar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+        </button>
+        <button class="nav-btn" data-view="settings" aria-label="Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        </button>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Home View -->
+      <section id="view-home" class="view active">
+        <!-- Entry Input Card -->
+        <div class="entry-card">
+          <div class="entry-header">
+            <div class="entry-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+            </div>
+            <div class="entry-header-text">
+              <h2>What are you grateful for right now?</h2>
+              <p>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
+                </svg>
+                Take a moment to reflect
+              </p>
+            </div>
+          </div>
+          <div class="entry-input-wrapper">
+            <textarea
+              id="entry-text"
+              class="entry-input"
+              placeholder="I'm grateful for..."
+              rows="3"
+              maxlength="500"
+            ></textarea>
+            <button class="mic-btn" id="mic-btn" aria-label="Voice input">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="entry-footer">
+            <span class="entry-hint">Type or use voice</span>
+            <button class="save-btn" id="save-entry-btn">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+              Save Gratitude
+            </button>
+          </div>
+        </div>
+
+        <!-- Greeting Section -->
+        <div class="greeting-section">
+          <div class="greeting-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" id="greeting-icon-svg">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </div>
+          <div class="greeting-text">
+            <h3 id="greeting-message">Good afternoon</h3>
+            <p id="gratitude-count">0 moments of gratitude</p>
+          </div>
+        </div>
+
+        <!-- Entries List / Empty State -->
+        <div id="entries-container">
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="12" r="5"/>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+              </svg>
+            </div>
+            <p>No gratitude entries yet today.<br>Take a moment to reflect!</p>
+          </div>
+        </div>
+
+        <!-- Quote Section -->
+        <div class="quote-section">
+          <div class="quote-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/>
+            </svg>
+          </div>
+          <p class="quote-text" id="daily-quote">"Be thankful for what you have; you'll end up having more."</p>
+        </div>
+      </section>
+
+      <!-- History View -->
+      <section id="view-history" class="view">
+        <h2 class="view-title">History</h2>
+        <div class="history-container" id="history-container">
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <p>No past entries yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Summary View -->
+      <section id="view-summary" class="view">
+        <h2 class="view-title">Today's Reflection</h2>
+        <div class="summary-container" id="summary-container">
+          <div class="empty-state">
+            <div class="empty-state-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+              </svg>
+            </div>
+            <p>Add some gratitude entries to see your daily reflection.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings View -->
+      <section id="view-settings" class="view">
+        <h2 class="view-title">Settings</h2>
+        <div class="settings-container">
+          <!-- Reminders Section -->
+          <div class="settings-card">
+            <h3 class="settings-heading">Reminders</h3>
+
+            <div class="setting-row">
+              <label for="reminders-toggle">Enable reminders</label>
+              <label class="toggle">
+                <input type="checkbox" id="reminders-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="reminder-settings hidden" id="reminder-settings">
+              <div class="setting-row">
+                <label for="reminders-count">Reminders per day</label>
+                <div class="slider-container">
+                  <input type="range" id="reminders-count" min="1" max="10" value="3">
+                  <span class="slider-value" id="reminders-count-value">3</span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <label for="start-time">Start time</label>
+                <input type="time" id="start-time" value="09:00">
+              </div>
+
+              <div class="setting-row">
+                <label for="end-time">End time</label>
+                <input type="time" id="end-time" value="21:00">
+              </div>
+
+              <p class="setting-hint">
+                You'll receive random reminders between these times.
+              </p>
+            </div>
+          </div>
+
+          <!-- Notification Permission -->
+          <div class="settings-card" id="notification-permission-card">
+            <h3 class="settings-heading">Notifications</h3>
+            <p class="setting-hint" id="notification-status">Checking notification status...</p>
+            <button class="btn btn-secondary btn-sm" id="enable-notifications-btn" style="display: none; margin-top: 12px;">
+              Enable Notifications
+            </button>
+          </div>
+
+          <!-- About Section -->
+          <div class="settings-card">
+            <h3 class="settings-heading">About</h3>
+            <p class="setting-hint">
+              Gratitude Journal helps you cultivate mindfulness through daily gratitude practice.
+              Take a moment each day to notice the good things in your life.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Install Prompt -->
+    <div class="install-prompt" id="install-prompt" style="display: none;">
+      <p>Install Gratitude for the best experience</p>
+      <div class="install-buttons">
+        <button class="btn btn-secondary btn-sm" id="install-later">Later</button>
+        <button class="btn btn-primary btn-sm" id="install-now">Install</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/push.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

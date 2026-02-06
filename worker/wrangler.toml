@@ -1,0 +1,23 @@
+name = "gratitude-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+workers_dev = true
+
+# KV namespace binding - create with: npx wrangler kv:namespace create "GRATITUDE_KV"
+# Then update the id below with the returned value
+[[kv_namespaces]]
+binding = "GRATITUDE_KV"
+id = "390efbe1502c469dae61f76d55543a3c"
+
+# Cron trigger - runs every minute to check for scheduled pushes
+[triggers]
+crons = ["* * * * *"]
+
+# Environment variables (non-secret)
+[vars]
+FRONTEND_URL = "https://YOUR_GITHUB_USERNAME.github.io/gratitude-app"
+
+# Secrets (set via: npx wrangler secret put VAPID_PUBLIC_KEY, etc.)
+# VAPID_PUBLIC_KEY
+# VAPID_PRIVATE_KEY
+# VAPID_SUBJECT (e.g., "mailto:your@email.com")
