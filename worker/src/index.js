@@ -53,6 +53,11 @@ export default {
         return jsonResponse({ status: 'ok', timestamp: new Date().toISOString() });
       }
 
+      // Test push - manually trigger a push notification
+      if (path === '/api/test-push' && request.method === 'POST') {
+        return await handleTestPush(request, env);
+      }
+
       return jsonResponse({ error: 'Not found' }, 404);
     } catch (error) {
       console.error('Request error:', error);
@@ -140,6 +145,32 @@ async function handleSaveSettings(request, env) {
   }
 
   return jsonResponse({ success: true });
+}
+
+/**
+ * Handle test push - manually trigger a push notification for testing
+ */
+async function handleTestPush(request, env) {
+  const { userId } = await request.json();
+
+  if (!userId) {
+    return jsonResponse({ error: 'Missing userId' }, 400);
+  }
+
+  // Get user's subscription
+  const subscriptionJson = await env.GRATITUDE_KV.get(`user:${userId}:subscription`);
+  if (!subscriptionJson) {
+    return jsonResponse({ error: 'No subscription found for user' }, 404);
+  }
+
+  const subscription = JSON.parse(subscriptionJson);
+
+  try {
+    await sendPush(subscription, env);
+    return jsonResponse({ success: true, message: 'Test push sent' });
+  } catch (error) {
+    return jsonResponse({ error: 'Failed to send push', details: error.message }, 500);
+  }
 }
 
 /**
