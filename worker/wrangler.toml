@@ -15,7 +15,7 @@ crons = ["* * * * *"]
 
 # Environment variables (non-secret)
 [vars]
-FRONTEND_URL = "https://YOUR_GITHUB_USERNAME.github.io/gratitude-app"
+FRONTEND_URL = "https://jvdheyden.github.io/gratitude-app"
 
 # Secrets (set via: npx wrangler secret put VAPID_PUBLIC_KEY, etc.)
 # VAPID_PUBLIC_KEY
