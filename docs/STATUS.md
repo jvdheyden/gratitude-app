@@ -22,31 +22,14 @@
 ### Deployment
 - [x] Git repository initialized
 - [x] GitHub repository created: https://github.com/jvdheyden/gratitude-app
-- [ ] GitHub Pages enabled (pending)
+- [x] GitHub Pages enabled: https://jvdheyden.github.io/gratitude-app/
+- [x] Worker FRONTEND_URL updated and redeployed
 
 ---
 
 ## TODO
 
-### 1. Enable GitHub Pages
-
-GitHub Pages is being configured. The site will be available at:
-`https://jvdheyden.github.io/gratitude-app/`
-
-### 2. Update Worker Configuration
-
-Once GitHub Pages is live, update `worker/wrangler.toml`:
-```toml
-[vars]
-FRONTEND_URL = "https://jvdheyden.github.io/gratitude-app"
-```
-
-Then redeploy:
-```bash
-cd worker && npx wrangler deploy
-```
-
-### 3. Test End-to-End
+### Test End-to-End
 
 1. Open the GitHub Pages URL on a mobile device
 2. "Add to Home Screen" to install the PWA
