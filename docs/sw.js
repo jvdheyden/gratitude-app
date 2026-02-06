@@ -8,14 +8,15 @@
  */
 
 const CACHE_NAME = 'gratitude-v1';
+// Use relative paths for GitHub Pages compatibility
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/css/styles.css',
-  '/js/app.js',
-  '/js/storage.js',
-  '/js/push.js',
-  '/manifest.json'
+  './',
+  './index.html',
+  './css/styles.css',
+  './js/app.js',
+  './js/storage.js',
+  './js/push.js',
+  './manifest.json'
 ];
 
 /**
@@ -96,8 +97,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Gratitude Moment',
     body: 'Take a moment to notice something you\'re grateful for today.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/badge-72.png',
+    icon: './icons/icon-192.png',
+    badge: './icons/badge-72.png',
     data: { action: 'open-entry' }
   };
 
@@ -162,7 +163,7 @@ self.addEventListener('notificationclick', (event) => {
 
         // Otherwise, open new window with hash to trigger entry modal
         if (clients.openWindow) {
-          return clients.openWindow('/#entry');
+          return clients.openWindow(self.registration.scope + '#entry');
         }
       })
   );
