@@ -276,42 +276,173 @@ async function processScheduleKey(key, env) {
 }
 
 /**
- * Send a push notification to a subscription
+ * Send a push notification to a subscription with VAPID authentication
  */
 async function sendPush(subscription, env) {
-  const payload = JSON.stringify({
-    title: 'Gratitude Moment',
-    body: 'Take a moment to notice something you\'re grateful for today.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/badge-72.png',
-    data: {
-      action: 'open-entry'
+  const { endpoint, keys } = subscription;
+
+  // Create VAPID JWT
+  const url = new URL(endpoint);
+  const audience = `${url.protocol}//${url.host}`;
+
+  const header = { alg: 'ES256', typ: 'JWT' };
+  const payload = {
+    aud: audience,
+    exp: Math.floor(Date.now() / 1000) + (12 * 60 * 60), // 12 hours
+    sub: env.VAPID_SUBJECT
+  };
+
+  const jwt = await createVapidJwt(header, payload, env.VAPID_PRIVATE_KEY);
+
+  // Send push with VAPID authorization (no payload for simplicity - SW shows default)
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `vapid t=${jwt}, k=${env.VAPID_PUBLIC_KEY}`,
+      'TTL': '86400',
+      'Content-Length': '0',
     }
   });
 
-  try {
-    // Use Web Push protocol
-    const response = await fetch(subscription.endpoint, {
-      method: 'POST',
-      headers: {
-        'TTL': '86400',
-        'Content-Type': 'application/json',
-        'Content-Length': payload.length.toString(),
-        // In production, add VAPID authentication headers
-        // This simplified version works with some push services
-      },
-      body: payload
-    });
-
-    if (!response.ok) {
-      console.error('Push failed:', response.status, await response.text());
-    }
-
-    return response;
-  } catch (error) {
-    console.error('Push error:', error);
-    throw error;
+  if (!response.ok) {
+    const text = await response.text();
+    console.error('Push failed:', response.status, text);
+    throw new Error(`Push failed: ${response.status} ${text}`);
   }
+
+  return response;
+}
+
+/**
+ * Create a VAPID JWT token
+ */
+async function createVapidJwt(header, payload, privateKeyBase64) {
+  const encoder = new TextEncoder();
+
+  const headerB64 = base64UrlEncode(JSON.stringify(header));
+  const payloadB64 = base64UrlEncode(JSON.stringify(payload));
+  const unsignedToken = `${headerB64}.${payloadB64}`;
+
+  // Decode the base64url private key
+  const privateKeyBytes = base64UrlDecode(privateKeyBase64);
+
+  // Import as JWK (easier than raw/pkcs8 for P-256)
+  const jwk = {
+    kty: 'EC',
+    crv: 'P-256',
+    d: privateKeyBase64,
+    x: '', // Will extract from public key
+    y: ''
+  };
+
+  // For VAPID, we need to import the raw 32-byte private key
+  // Convert to proper JWK format
+  const key = await crypto.subtle.importKey(
+    'raw',
+    privateKeyBytes,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  ).catch(async () => {
+    // If raw import fails, try as JWK with just 'd' parameter
+    // We need to derive x,y from the private key or use a different approach
+    // For Cloudflare Workers, let's use the pkcs8 approach
+    const pkcs8Key = createPkcs8FromRaw(privateKeyBytes);
+    return crypto.subtle.importKey(
+      'pkcs8',
+      pkcs8Key,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+  });
+
+  // Sign the token
+  const signature = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    encoder.encode(unsignedToken)
+  );
+
+  // Convert DER signature to raw r||s format for JWT
+  const signatureBytes = new Uint8Array(signature);
+  const rawSignature = derToRaw(signatureBytes);
+  const signatureB64 = base64UrlEncode(rawSignature);
+
+  return `${unsignedToken}.${signatureB64}`;
+}
+
+/**
+ * Convert DER encoded ECDSA signature to raw r||s format
+ */
+function derToRaw(der) {
+  // Web Crypto returns raw 64-byte signature for P-256, not DER
+  if (der.length === 64) {
+    return der;
+  }
+
+  // If it's DER encoded, parse it (shouldn't happen with Web Crypto)
+  // DER: 0x30 [total-length] 0x02 [r-length] [r] 0x02 [s-length] [s]
+  let offset = 2;
+  const rLen = der[offset + 1];
+  const r = der.slice(offset + 2, offset + 2 + rLen);
+  offset = offset + 2 + rLen;
+  const sLen = der[offset + 1];
+  const s = der.slice(offset + 2, offset + 2 + sLen);
+
+  // Pad or trim to 32 bytes each
+  const raw = new Uint8Array(64);
+  raw.set(r.length > 32 ? r.slice(-32) : r, 32 - Math.min(r.length, 32));
+  raw.set(s.length > 32 ? s.slice(-32) : s, 64 - Math.min(s.length, 32));
+  return raw;
+}
+
+/**
+ * Create PKCS#8 wrapper for raw EC private key
+ */
+function createPkcs8FromRaw(rawKey) {
+  // PKCS#8 header for P-256 EC private key (without public key)
+  const header = new Uint8Array([
+    0x30, 0x41, // SEQUENCE, 65 bytes
+    0x02, 0x01, 0x00, // INTEGER 0 (version)
+    0x30, 0x13, // SEQUENCE, 19 bytes (algorithm)
+    0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, // OID ecPublicKey
+    0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, // OID P-256
+    0x04, 0x27, // OCTET STRING, 39 bytes
+    0x30, 0x25, // SEQUENCE, 37 bytes
+    0x02, 0x01, 0x01, // INTEGER 1 (version)
+    0x04, 0x20 // OCTET STRING, 32 bytes (private key)
+  ]);
+
+  const result = new Uint8Array(header.length + rawKey.length);
+  result.set(header);
+  result.set(rawKey, header.length);
+  return result;
+}
+
+function base64UrlEncode(data) {
+  let bytes;
+  if (typeof data === 'string') {
+    bytes = new TextEncoder().encode(data);
+  } else {
+    bytes = data;
+  }
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function base64UrlDecode(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 /**
