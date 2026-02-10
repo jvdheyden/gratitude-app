@@ -7,7 +7,7 @@
  * - Scheduled push notification sending (via cron)
  */
 
-import { generateRandomTimes, getDateInTimezone, getTimeInTimezone, scheduleKey } from './scheduler.js';
+import { generateRandomTimes, getDateInTimezone, toUtcDateTimeParts } from './scheduler.js';
 
 // CORS headers for frontend requests
 const corsHeaders = {
@@ -69,8 +69,14 @@ export default {
    * Cron trigger - runs every minute to send scheduled push notifications
    */
   async scheduled(event, env, ctx) {
-    console.log('Cron triggered at:', new Date().toISOString());
-    await processScheduledPushes(env);
+    console.log('Cron triggered at:', new Date().toISOString(), 'cron:', event.cron);
+
+    if (event.cron === '0 * * * *') {
+      await refreshSchedules(env);
+      return;
+    }
+
+    await processMinuteBucket(env);
   }
 };
 
@@ -125,26 +131,28 @@ async function handleSaveSettings(request, env) {
     JSON.stringify(settings)
   );
 
-  // Generate schedule for today if reminders are enabled
-  if (enabled) {
-    const today = getDateInTimezone(timezone);
-    const times = generateRandomTimes(remindersPerDay, startTime, endTime, today);
-
-    const schedule = {
-      times,
-      sent: [], // Track which times have been sent
-      timezone
-    };
-
-    await env.GRATITUDE_KV.put(
-      scheduleKey(today, userId),
-      JSON.stringify(schedule)
-    );
-
-    console.log(`Generated schedule for user ${userId} on ${today}:`, times);
+  // Remove any existing buckets for this user before regenerating
+  const existingScheduleJson = await env.GRATITUDE_KV.get(`schedule:${userId}`);
+  if (existingScheduleJson) {
+    try {
+      const existingSchedule = JSON.parse(existingScheduleJson);
+      if (Array.isArray(existingSchedule.utcTimes)) {
+        await removeUserFromBuckets(userId, existingSchedule.utcTimes, env);
+      }
+    } catch (error) {
+      console.warn('Failed to parse existing schedule for cleanup:', error);
+    }
   }
 
-  return jsonResponse({ success: true });
+  if (!enabled) {
+    await env.GRATITUDE_KV.delete(`schedule:${userId}`);
+    return jsonResponse({ success: true, enabled: false });
+  }
+
+  const schedule = await buildScheduleForUser(userId, settings, env);
+  console.log(`Generated schedule for user ${userId} on ${schedule.date}:`, schedule.times);
+
+  return jsonResponse({ success: true, enabled: true, scheduleDate: schedule.date });
 }
 
 /**
@@ -190,88 +198,262 @@ async function handleGetSettings(userId, env) {
   return jsonResponse({ settings: JSON.parse(settings) });
 }
 
+const BUCKET_TTL_SECONDS = 60 * 60 * 48;
+
 /**
- * Process scheduled push notifications (called by cron)
+ * Process scheduled push notifications for the current UTC minute
  */
-async function processScheduledPushes(env) {
-  // List all users with settings
-  // Note: In production, you'd want a more efficient way to do this
-  // For MVP, we iterate through known schedule keys
+async function processMinuteBucket(env) {
+  const { date: utcDate, time: utcTime } = getCurrentUtcParts();
+  const bucket = bucketKey(utcDate, utcTime);
 
-  // Get all schedule keys for today across different timezones
-  // We check multiple possible "today" dates to handle timezone differences
-  const now = new Date();
-  const dates = [
-    now.toISOString().split('T')[0], // UTC today
-  ];
+  const bucketJson = await env.GRATITUDE_KV.get(bucket);
+  if (!bucketJson) return;
 
-  // Add yesterday and tomorrow to handle timezone edge cases
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  dates.push(yesterday.toISOString().split('T')[0]);
+  let userIds;
+  try {
+    userIds = JSON.parse(bucketJson);
+  } catch (error) {
+    console.warn('Invalid bucket payload:', bucket, error);
+    return;
+  }
 
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  dates.push(tomorrow.toISOString().split('T')[0]);
+  if (!Array.isArray(userIds) || userIds.length === 0) return;
 
-  console.log('Checking schedules for dates:', dates);
-
-  // List all keys with schedule prefix
-  // Note: KV list has limitations, for large scale you'd need a different approach
-  const listResult = await env.GRATITUDE_KV.list({ prefix: 'schedule:' });
-
-  for (const key of listResult.keys) {
-    await processScheduleKey(key.name, env);
+  const utcKey = `${utcDate}T${utcTime}`;
+  for (const userId of userIds) {
+    await processUserForUtcTime(userId, utcKey, env);
   }
 }
 
 /**
- * Process a single schedule key
+ * Process a single user for a specific UTC minute
  */
-async function processScheduleKey(key, env) {
-  // Parse key: schedule:{date}:{userId}
-  const parts = key.split(':');
-  if (parts.length !== 3) return;
-
-  const [, date, userId] = parts;
-
-  // Get schedule
-  const scheduleJson = await env.GRATITUDE_KV.get(key);
+async function processUserForUtcTime(userId, utcKey, env) {
+  const scheduleJson = await env.GRATITUDE_KV.get(`schedule:${userId}`);
   if (!scheduleJson) return;
 
-  const schedule = JSON.parse(scheduleJson);
-  const { times, sent, timezone } = schedule;
+  let schedule;
+  try {
+    schedule = JSON.parse(scheduleJson);
+  } catch (error) {
+    console.warn('Invalid schedule payload for user:', userId, error);
+    return;
+  }
 
-  // Get current time in user's timezone
-  const currentTime = getTimeInTimezone(timezone);
-  const currentDate = getDateInTimezone(timezone);
+  if (!Array.isArray(schedule.utcTimes) || !schedule.utcTimes.includes(utcKey)) {
+    return;
+  }
 
-  // Only process if this schedule is for today in user's timezone
-  if (date !== currentDate) return;
+  const sentUtc = Array.isArray(schedule.sentUtc) ? schedule.sentUtc : [];
+  if (sentUtc.includes(utcKey)) return;
 
-  // Check if any scheduled time matches current minute
-  for (const time of times) {
-    if (time === currentTime && !sent.includes(time)) {
-      console.log(`Sending push to user ${userId} at ${time}`);
+  if (!schedule.timezone) return;
+  const currentDate = getDateInTimezone(schedule.timezone);
+  if (schedule.date !== currentDate) return;
 
-      // Get user's subscription
-      const subscriptionJson = await env.GRATITUDE_KV.get(`user:${userId}:subscription`);
-      if (!subscriptionJson) {
-        console.log(`No subscription found for user ${userId}`);
+  const subscriptionJson = await env.GRATITUDE_KV.get(`user:${userId}:subscription`);
+  if (!subscriptionJson) {
+    console.log(`No subscription found for user ${userId}`);
+    return;
+  }
+
+  const subscription = JSON.parse(subscriptionJson);
+
+  await sendPush(subscription, env);
+
+  sentUtc.push(utcKey);
+  schedule.sentUtc = sentUtc;
+  await env.GRATITUDE_KV.put(`schedule:${userId}`, JSON.stringify(schedule));
+
+  console.log(`Push sent to user ${userId} at ${utcKey}`);
+}
+
+/**
+ * Hourly refresh: ensure schedules exist for the user's current local day
+ */
+async function refreshSchedules(env) {
+  let cursor;
+  do {
+    const listResult = await env.GRATITUDE_KV.list({ prefix: 'schedule:', cursor });
+
+    for (const key of listResult.keys) {
+      const parts = key.name.split(':');
+
+      // Legacy format: schedule:{date}:{userId}
+      if (parts.length === 3) {
+        const userId = parts[2];
+        const settings = await getSettingsForUser(userId, env);
+        if (settings && settings.enabled) {
+          await buildScheduleForUser(userId, settings, env);
+        }
+        await env.GRATITUDE_KV.delete(key.name);
         continue;
       }
 
-      const subscription = JSON.parse(subscriptionJson);
+      if (parts.length !== 2) continue;
 
-      // Send push notification
-      await sendPush(subscription, env);
+      const userId = parts[1];
+      const scheduleJson = await env.GRATITUDE_KV.get(key.name);
+      if (!scheduleJson) continue;
 
-      // Mark as sent
-      sent.push(time);
-      await env.GRATITUDE_KV.put(key, JSON.stringify({ times, sent, timezone }));
+      let schedule;
+      try {
+        schedule = JSON.parse(scheduleJson);
+      } catch (error) {
+        console.warn('Invalid schedule payload for user:', userId, error);
+        continue;
+      }
 
-      console.log(`Push sent to user ${userId}`);
+      if (!schedule.timezone) continue;
+
+      const currentDate = getDateInTimezone(schedule.timezone);
+      if (schedule.date === currentDate) continue;
+
+      const settings = settingsFromSchedule(schedule) || await getSettingsForUser(userId, env);
+      if (!settings || !settings.enabled) {
+        await env.GRATITUDE_KV.delete(key.name);
+        continue;
+      }
+
+      await buildScheduleForUser(userId, settings, env, schedule);
     }
+
+    cursor = listResult.cursor;
+    if (listResult.list_complete) break;
+  } while (cursor);
+}
+
+/**
+ * Build a schedule for a user and create minute buckets
+ */
+async function buildScheduleForUser(userId, settings, env, previousSchedule = null) {
+  const { remindersPerDay, startTime, endTime, timezone } = settings;
+  const reminders = parseInt(remindersPerDay, 10);
+  const date = getDateInTimezone(timezone);
+  const times = generateRandomTimes(reminders, startTime, endTime, date);
+
+  const utcTimes = times.map((time) => {
+    const utc = toUtcDateTimeParts(date, time, timezone);
+    return `${utc.date}T${utc.time}`;
+  });
+
+  if (previousSchedule && Array.isArray(previousSchedule.utcTimes)) {
+    await removeUserFromBuckets(userId, previousSchedule.utcTimes, env);
+  }
+
+  const schedule = {
+    date,
+    timezone,
+    remindersPerDay: reminders,
+    startTime,
+    endTime,
+    times,
+    utcTimes,
+    sentUtc: []
+  };
+
+  await env.GRATITUDE_KV.put(`schedule:${userId}`, JSON.stringify(schedule));
+  await addUserToBuckets(userId, utcTimes, env);
+
+  return schedule;
+}
+
+async function addUserToBuckets(userId, utcTimes, env) {
+  for (const utcKey of utcTimes) {
+    const [date, time] = utcKey.split('T');
+    if (!date || !time) continue;
+    await addUserToBucket(userId, date, time, env);
+  }
+}
+
+async function removeUserFromBuckets(userId, utcTimes, env) {
+  for (const utcKey of utcTimes) {
+    const [date, time] = utcKey.split('T');
+    if (!date || !time) continue;
+    await removeUserFromBucket(userId, date, time, env);
+  }
+}
+
+async function addUserToBucket(userId, date, time, env) {
+  const key = bucketKey(date, time);
+  const existingJson = await env.GRATITUDE_KV.get(key);
+  let list = [];
+
+  if (existingJson) {
+    try {
+      const parsed = JSON.parse(existingJson);
+      if (Array.isArray(parsed)) list = parsed;
+    } catch (error) {
+      console.warn('Invalid bucket payload:', key, error);
+    }
+  }
+
+  if (!list.includes(userId)) {
+    list.push(userId);
+    await env.GRATITUDE_KV.put(key, JSON.stringify(list), { expirationTtl: BUCKET_TTL_SECONDS });
+  }
+}
+
+async function removeUserFromBucket(userId, date, time, env) {
+  const key = bucketKey(date, time);
+  const existingJson = await env.GRATITUDE_KV.get(key);
+  if (!existingJson) return;
+
+  let list;
+  try {
+    list = JSON.parse(existingJson);
+  } catch (error) {
+    console.warn('Invalid bucket payload:', key, error);
+    return;
+  }
+
+  if (!Array.isArray(list)) return;
+  const filtered = list.filter(id => id !== userId);
+
+  if (filtered.length === 0) {
+    await env.GRATITUDE_KV.delete(key);
+  } else {
+    await env.GRATITUDE_KV.put(key, JSON.stringify(filtered), { expirationTtl: BUCKET_TTL_SECONDS });
+  }
+}
+
+function bucketKey(date, time) {
+  return `bucket:${date}:${time}`;
+}
+
+function getCurrentUtcParts() {
+  const now = new Date();
+  return {
+    date: now.toISOString().slice(0, 10),
+    time: now.toISOString().slice(11, 16)
+  };
+}
+
+function settingsFromSchedule(schedule) {
+  if (!schedule) return null;
+  if (!schedule.remindersPerDay || !schedule.startTime || !schedule.endTime || !schedule.timezone) {
+    return null;
+  }
+
+  return {
+    enabled: true,
+    remindersPerDay: schedule.remindersPerDay,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    timezone: schedule.timezone
+  };
+}
+
+async function getSettingsForUser(userId, env) {
+  const settingsJson = await env.GRATITUDE_KV.get(`user:${userId}:settings`);
+  if (!settingsJson) return null;
+
+  try {
+    return JSON.parse(settingsJson);
+  } catch (error) {
+    console.warn('Invalid settings payload for user:', userId, error);
+    return null;
   }
 }
 

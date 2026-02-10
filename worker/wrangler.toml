@@ -11,7 +11,7 @@ id = "390efbe1502c469dae61f76d55543a3c"
 
 # Cron trigger - runs every minute to check for scheduled pushes
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "0 * * * *"]
 
 # Environment variables (non-secret)
 [vars]

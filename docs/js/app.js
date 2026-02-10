@@ -522,14 +522,12 @@ async function saveAllSettings() {
   // Save locally
   window.Storage.saveSettings(settings);
 
-  // Save to backend if reminders enabled
-  if (settings.enabled) {
-    try {
-      await window.Push.saveSettingsToBackend(settings);
-      console.log('Settings synced to backend');
-    } catch (error) {
-      console.error('Failed to sync settings:', error);
-    }
+  // Save to backend so the worker can create or remove schedules
+  try {
+    await window.Push.saveSettingsToBackend(settings);
+    console.log('Settings synced to backend');
+  } catch (error) {
+    console.error('Failed to sync settings:', error);
   }
 }
 
